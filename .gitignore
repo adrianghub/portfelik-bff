@@ -1,0 +1,27 @@
+# Binaries
+/portfelik-bff
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Environment variables and credentials
+.env
+internal/config/service-account.json
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# IDE files
+.idea/
+.vscode/
+
+# Dependencies
+/vendor/
+
+# Logs
+*.log
