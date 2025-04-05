@@ -1,4 +1,4 @@
-package middleware
+package middlewares
 
 import (
 	"net/http"
@@ -7,13 +7,13 @@ import (
 	"github.com/panizinko/portfelik-bff/internal/logger"
 )
 
-func RequestLogger(log *logger.Logger) func(http.Handler) http.Handler {
+func RequestLogger(logger *logger.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			next.ServeHTTP(w, r)
 			duration := time.Since(start)
-			log.LogRequest(r.Method, r.URL.Path, r.RemoteAddr, duration)
+			logger.LogRequest(r.Method, r.URL.Path, r.RemoteAddr, duration)
 		})
 	}
 }

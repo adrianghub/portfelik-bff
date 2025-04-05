@@ -13,18 +13,19 @@ import (
 	"google.golang.org/api/option"
 )
 
+const UserContextKey = "user"
+
 type FirebaseAuth struct {
 	client *auth.Client
 }
 
-func NewFirebaseAuth(credentialsPath string) (*FirebaseAuth, error) {
+func NewFirebaseAuth(credentialsJson string) (*FirebaseAuth, error) {
 	ctx := context.Background()
 
 	emulatorHost := os.Getenv("FIREBASE_AUTH_EMULATOR_HOST")
 	if emulatorHost != "" {
 		log.Printf("Using Firebase Auth emulator at %s", emulatorHost)
 
-		// When using the emulator, there is no need for real credentials
 		app, err := firebase.NewApp(ctx, &firebase.Config{
 			ProjectID: os.Getenv("FIREBASE_PROJECT_ID"),
 		})
@@ -42,7 +43,7 @@ func NewFirebaseAuth(credentialsPath string) (*FirebaseAuth, error) {
 		}, nil
 	}
 
-	opt := option.WithCredentialsFile(credentialsPath)
+	opt := option.WithCredentialsJSON([]byte(credentialsJson))
 	app, err := firebase.NewApp(ctx, nil, opt)
 	if err != nil {
 		return nil, fmt.Errorf("error initializing Firebase app: %v", err)
@@ -66,14 +67,6 @@ func (fa *FirebaseAuth) VerifyIDToken(ctx context.Context, idToken string) (*aut
 	return token, nil
 }
 
-func (fa *FirebaseAuth) GetUserByUID(ctx context.Context, uid string) (*auth.UserRecord, error) {
-	user, err := fa.client.GetUser(ctx, uid)
-	if err != nil {
-		return nil, fmt.Errorf("error getting user by UID: %v", err)
-	}
-	return user, nil
-}
-
 func (fa *FirebaseAuth) Middleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -95,9 +88,7 @@ func (fa *FirebaseAuth) Middleware() func(http.Handler) http.Handler {
 				return
 			}
 
-			type userContextKey struct{}
-
-			ctx := context.WithValue(r.Context(), userContextKey{}, token)
+			ctx := context.WithValue(r.Context(), UserContextKey, token)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

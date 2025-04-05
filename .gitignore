@@ -25,3 +25,5 @@ internal/config/service-account.json
 
 # Logs
 *.log
+
+tmp/

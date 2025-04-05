@@ -9,15 +9,17 @@ import (
 	"syscall"
 	"time"
 
+	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go/v4"
-	firebaseauth "firebase.google.com/go/v4/auth"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
 	"github.com/panizinko/portfelik-bff/internal/auth"
 	"github.com/panizinko/portfelik-bff/internal/handlers"
 	"github.com/panizinko/portfelik-bff/internal/logger"
-	"github.com/panizinko/portfelik-bff/internal/middleware"
+	"github.com/panizinko/portfelik-bff/internal/middlewares"
+	"github.com/panizinko/portfelik-bff/internal/repositories"
 	"google.golang.org/api/option"
 )
 
@@ -53,17 +55,12 @@ func main() {
 	}
 
 	var firebaseApp *firebase.App
-	var authClient *firebaseauth.Client
-	var credentialsPath string
+	var firestoreClient *firestore.Client
+	var credentialsJson string
 
 	if isDevelopment {
 		firebaseConfig := &firebase.Config{
 			ProjectID: os.Getenv("FIREBASE_PROJECT_ID"),
-		}
-
-		if firebaseConfig.ProjectID == "" {
-			firebaseConfig.ProjectID = "portfelik-dev"
-			logger.Info("Using default project ID: %s", firebaseConfig.ProjectID)
 		}
 
 		app, err := firebase.NewApp(context.Background(), firebaseConfig)
@@ -74,13 +71,13 @@ func main() {
 
 		firebaseApp = app
 	} else {
-		credentialsPath = os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-		if credentialsPath == "" {
+		credentialsJson = os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+		if credentialsJson == "" {
 			logger.Error("GOOGLE_APPLICATION_CREDENTIALS environment variable is not set")
 			os.Exit(1)
 		}
 
-		opt := option.WithCredentialsFile(credentialsPath)
+		opt := option.WithCredentialsJSON([]byte(credentialsJson))
 		app, err := firebase.NewApp(context.Background(), nil, opt)
 		if err != nil {
 			logger.Error("Error initializing Firebase app: %v", err)
@@ -90,13 +87,16 @@ func main() {
 		firebaseApp = app
 	}
 
-	authClient, err = firebaseApp.Auth(context.Background())
+	firestoreClient, err = firebaseApp.Firestore(context.Background())
 	if err != nil {
-		logger.Error("Error initializing Firebase auth client: %v", err)
+		logger.Error("Error initializing Firestore client: %v", err)
 		os.Exit(1)
 	}
+	defer firestoreClient.Close()
 
-	authService, err := auth.NewFirebaseAuth(credentialsPath)
+	transactionRepository := repositories.NewTransactionRepository(firestoreClient, logger)
+
+	authService, err := auth.NewFirebaseAuth(credentialsJson)
 	if err != nil {
 		logger.Error("Error initializing Firebase auth service: %v", err)
 		os.Exit(1)
@@ -106,8 +106,17 @@ func main() {
 
 	r.Use(chimiddleware.RequestID)
 	r.Use(chimiddleware.RealIP)
-	r.Use(middleware.RequestLogger(logger))
 	r.Use(chimiddleware.Recoverer)
+	r.Use(middlewares.RequestLogger(logger))
+
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -118,8 +127,8 @@ func main() {
 		r.Group(func(r chi.Router) {
 			r.Use(authService.Middleware())
 
-			userHandler := handlers.NewUserHandler(authClient, logger)
-			r.Mount("/users", userHandler.Routes())
+			transactionHandler := handlers.NewTransactionHandler(transactionRepository, logger)
+			r.Mount("/transactions", transactionHandler.Routes())
 		})
 	})
 

@@ -131,3 +131,79 @@ portfelik-bff/
 ## License
 
 MIT
+
+## Cloud Run Deployment
+
+### Manual Deployment
+
+To deploy the service to Google Cloud Run manually:
+
+1. Install the Google Cloud SDK:
+   ```sh
+   brew install google-cloud-sdk  # macOS with Homebrew
+   ```
+
+2. Authenticate with Google Cloud:
+   ```sh
+   gcloud auth login
+   gcloud config set project YOUR_GCP_PROJECT_ID
+   ```
+
+3. Deploy to Cloud Run:
+   ```sh
+   gcloud run deploy portfelik-bff --source . --region us-central1 --platform managed --allow-unauthenticated
+   ```
+
+4. Set environment variables for production:
+   ```sh
+   gcloud run services update portfelik-bff \
+     --set-env-vars="GO_ENV=production,FIREBASE_PROJECT_ID=your-project-id" \
+     --region us-central1
+   ```
+
+### Automated Deployment
+
+This repository includes two ways to set up continuous deployment:
+
+1. **GitHub Actions**: Automatically deploys when changes are pushed to the main branch.
+   - Required secrets:
+     - `GCP_PROJECT_ID`: Your Google Cloud project ID
+     - `GCP_SA_KEY`: JSON credentials for a service account with Cloud Run Admin permissions
+     - `FIREBASE_SA_JSON`: Firebase service account JSON for authentication
+     - `FIREBASE_PROJECT_ID`: Your Firebase project ID
+
+2. **Cloud Build**: Use Google Cloud Build for CI/CD pipeline.
+   - To set up a Cloud Build trigger:
+     ```sh
+     gcloud builds triggers create github \
+       --repo=your-github-repo \
+       --branch-pattern=main \
+       --build-config=cloudbuild.yaml
+     ```
+   - Set the required substitution variables in the Cloud Build trigger settings or modify them in the cloudbuild.yaml file.
+
+### Managing Service Accounts
+
+For deployment to work correctly, you need:
+
+1. A GCP service account with these roles:
+   - Cloud Run Admin
+   - Storage Admin
+   - Service Account User
+
+2. A Firebase service account with Firebase Admin SDK access
+   - Download the JSON file and keep it secure
+   - For GitHub Actions, store it as a secret
+   - For manual deployment, save it at `internal/config/service-account.json`
+
+### Accessing Your Deployed Service
+
+Once deployed, your service will be available at:
+```
+https://portfelik-bff-[hash].a.run.app
+```
+
+You can get the URL after deployment is complete using:
+```sh
+gcloud run services describe portfelik-bff --platform managed --region us-central1 --format 'value(status.url)'
+```

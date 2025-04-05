@@ -1,0 +1,31 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/main ./main.go"
+bin = "./tmp/main"
+include_ext = ["go"]  # Only watch .go files
+exclude_dir = ["tmp", "vendor", "node_modules", "public"]
+delay = 1000  # ms
+
+[log]
+time = true
+
+[misc]
+clean_on_exit = true
+
+[color]
+  app = ""
+  build = "yellow"
+  main = "magenta"
+  runner = "green"
+  watcher = "cyan"
+
+[proxy]
+  app_port = 0
+  enabled = false
+  proxy_port = 0
+
+[screen]
+  clear_on_rebuild = false
+  keep_scroll = true
