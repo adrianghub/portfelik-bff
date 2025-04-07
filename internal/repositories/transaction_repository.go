@@ -2,6 +2,8 @@ package repositories
 
 import (
 	"context"
+	"math"
+	"time"
 
 	"cloud.google.com/go/firestore"
 	"github.com/panizinko/portfelik-bff/internal/logger"
@@ -196,4 +198,268 @@ func (r *TransactionRepository) GetSharedTransactionsByDateRange(
 	}
 
 	return transactions, nil
+}
+
+// Helper function to extract month key from a date string
+func extractMonthKey(dateStr string) (string, error) {
+	var t time.Time
+	var err error
+
+	t, err = time.Parse(time.RFC3339, dateStr)
+	if err != nil {
+		t, err = time.Parse("2006-01-02", dateStr)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return t.Format("2006-01"), nil
+}
+
+// GetTransactionSummaryByMonth retrieves and aggregates transaction data by month
+func (r *TransactionRepository) GetTransactionSummaryByMonth(
+	ctx context.Context,
+	userID string,
+	startDate, endDate string,
+) ([]models.MonthlySummary, error) {
+	// Retrieve transactions for the specified date range
+	transactions, err := r.GetTransactionsByDateRange(ctx, userID, startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	// Map to store monthly summaries by month string (YYYY-MM)
+	monthlySummaries := make(map[string]*models.MonthlySummary)
+
+	// Process transactions
+	for _, transaction := range transactions {
+		// Extract month from date
+		month, err := extractMonthKey(transaction.Date)
+		if err != nil {
+			// Skip transactions with invalid dates
+			r.logger.Error("Invalid date format: %s, error: %v", transaction.Date, err)
+			continue
+		}
+
+		// Initialize monthly summary if it doesn't exist
+		if _, exists := monthlySummaries[month]; !exists {
+			monthlySummaries[month] = &models.MonthlySummary{
+				Month:             month,
+				TotalExpenses:     0,
+				TotalIncome:       0,
+				Delta:             0,
+				CategorySummaries: []models.CategorySummary{},
+			}
+		}
+
+		// Update totals based on transaction type
+		if transaction.Type == "expense" {
+			monthlySummaries[month].TotalExpenses += math.Abs(transaction.Amount)
+		} else if transaction.Type == "income" {
+			monthlySummaries[month].TotalIncome += transaction.Amount
+		}
+	}
+
+	// Calculate delta and category summaries
+	for _, summary := range monthlySummaries {
+		// Calculate delta (income - expenses)
+		summary.Delta = summary.TotalIncome - summary.TotalExpenses
+
+		// Process category summaries
+		categoryAmounts := make(map[string]float64)
+
+		// First pass: calculate total amount per category
+		for _, transaction := range transactions {
+			if transaction.Type == "expense" {
+				categoryAmounts[transaction.CategoryID] += math.Abs(transaction.Amount)
+			}
+		}
+
+		// Second pass: calculate percentages and build CategorySummary objects
+		for categoryID, amount := range categoryAmounts {
+			percentage := 0.0
+			if summary.TotalExpenses > 0 {
+				percentage = (amount / summary.TotalExpenses) * 100
+			}
+
+			summary.CategorySummaries = append(summary.CategorySummaries, models.CategorySummary{
+				CategoryID: categoryID,
+				Amount:     amount,
+				Percentage: percentage,
+			})
+		}
+	}
+
+	// Convert map to slice for returning
+	result := make([]models.MonthlySummary, 0, len(monthlySummaries))
+	for _, summary := range monthlySummaries {
+		result = append(result, *summary)
+	}
+
+	return result, nil
+}
+
+// GetAllTransactionSummaryByMonth retrieves and aggregates all transaction data by month for admin users
+func (r *TransactionRepository) GetAllTransactionSummaryByMonth(
+	ctx context.Context,
+	startDate, endDate string,
+) ([]models.MonthlySummary, error) {
+	// Retrieve all transactions for the specified date range
+	transactions, err := r.GetAllTransactionsByDateRange(ctx, startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	// Map to store monthly summaries by month string (YYYY-MM)
+	monthlySummaries := make(map[string]*models.MonthlySummary)
+
+	// Process transactions
+	for _, transaction := range transactions {
+		// Extract month from date
+		month, err := extractMonthKey(transaction.Date)
+		if err != nil {
+			// Skip transactions with invalid dates
+			r.logger.Error("Invalid date format: %s, error: %v", transaction.Date, err)
+			continue
+		}
+
+		// Initialize monthly summary if it doesn't exist
+		if _, exists := monthlySummaries[month]; !exists {
+			monthlySummaries[month] = &models.MonthlySummary{
+				Month:             month,
+				TotalExpenses:     0,
+				TotalIncome:       0,
+				Delta:             0,
+				CategorySummaries: []models.CategorySummary{},
+			}
+		}
+
+		// Update totals based on transaction type
+		if transaction.Type == "expense" {
+			monthlySummaries[month].TotalExpenses += math.Abs(transaction.Amount)
+		} else if transaction.Type == "income" {
+			monthlySummaries[month].TotalIncome += transaction.Amount
+		}
+	}
+
+	// Calculate delta and category summaries
+	for _, summary := range monthlySummaries {
+		// Calculate delta (income - expenses)
+		summary.Delta = summary.TotalIncome - summary.TotalExpenses
+
+		// Process category summaries
+		categoryAmounts := make(map[string]float64)
+
+		// First pass: calculate total amount per category
+		for _, transaction := range transactions {
+			if transaction.Type == "expense" {
+				categoryAmounts[transaction.CategoryID] += math.Abs(transaction.Amount)
+			}
+		}
+
+		// Second pass: calculate percentages and build CategorySummary objects
+		for categoryID, amount := range categoryAmounts {
+			percentage := 0.0
+			if summary.TotalExpenses > 0 {
+				percentage = (amount / summary.TotalExpenses) * 100
+			}
+
+			summary.CategorySummaries = append(summary.CategorySummaries, models.CategorySummary{
+				CategoryID: categoryID,
+				Amount:     amount,
+				Percentage: percentage,
+			})
+		}
+	}
+
+	// Convert map to slice for returning
+	result := make([]models.MonthlySummary, 0, len(monthlySummaries))
+	for _, summary := range monthlySummaries {
+		result = append(result, *summary)
+	}
+
+	return result, nil
+}
+
+// GetSharedTransactionSummaryByMonth retrieves and aggregates shared transaction data by month
+func (r *TransactionRepository) GetSharedTransactionSummaryByMonth(
+	ctx context.Context,
+	userID string,
+	startDate, endDate string,
+) ([]models.MonthlySummary, error) {
+	// Retrieve shared transactions for the specified date range
+	transactions, err := r.GetSharedTransactionsByDateRange(ctx, userID, startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	// Map to store monthly summaries by month string (YYYY-MM)
+	monthlySummaries := make(map[string]*models.MonthlySummary)
+
+	// Process transactions
+	for _, transaction := range transactions {
+		// Extract month from date
+		month, err := extractMonthKey(transaction.Date)
+		if err != nil {
+			// Skip transactions with invalid dates
+			r.logger.Error("Invalid date format: %s, error: %v", transaction.Date, err)
+			continue
+		}
+
+		// Initialize monthly summary if it doesn't exist
+		if _, exists := monthlySummaries[month]; !exists {
+			monthlySummaries[month] = &models.MonthlySummary{
+				Month:             month,
+				TotalExpenses:     0,
+				TotalIncome:       0,
+				Delta:             0,
+				CategorySummaries: []models.CategorySummary{},
+			}
+		}
+
+		// Update totals based on transaction type
+		if transaction.Type == "expense" {
+			monthlySummaries[month].TotalExpenses += math.Abs(transaction.Amount)
+		} else if transaction.Type == "income" {
+			monthlySummaries[month].TotalIncome += transaction.Amount
+		}
+	}
+
+	// Calculate delta and category summaries
+	for _, summary := range monthlySummaries {
+		// Calculate delta (income - expenses)
+		summary.Delta = summary.TotalIncome - summary.TotalExpenses
+
+		// Process category summaries
+		categoryAmounts := make(map[string]float64)
+
+		// First pass: calculate total amount per category
+		for _, transaction := range transactions {
+			if transaction.Type == "expense" {
+				categoryAmounts[transaction.CategoryID] += math.Abs(transaction.Amount)
+			}
+		}
+
+		// Second pass: calculate percentages and build CategorySummary objects
+		for categoryID, amount := range categoryAmounts {
+			percentage := 0.0
+			if summary.TotalExpenses > 0 {
+				percentage = (amount / summary.TotalExpenses) * 100
+			}
+
+			summary.CategorySummaries = append(summary.CategorySummaries, models.CategorySummary{
+				CategoryID: categoryID,
+				Amount:     amount,
+				Percentage: percentage,
+			})
+		}
+	}
+
+	// Convert map to slice for returning
+	result := make([]models.MonthlySummary, 0, len(monthlySummaries))
+	for _, summary := range monthlySummaries {
+		result = append(result, *summary)
+	}
+
+	return result, nil
 }

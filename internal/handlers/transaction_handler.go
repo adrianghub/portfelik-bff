@@ -29,6 +29,8 @@ func (h *TransactionHandler) Routes() chi.Router {
 
 	r.Get("/", h.getTransactionsByDateRange)
 	r.Get("/shared", h.getSharedTransactionsByDateRange)
+	r.Get("/summary", h.getTransactionSummaryByMonth)
+	r.Get("/summary/shared", h.getSharedTransactionSummaryByMonth)
 
 	return r
 }
@@ -139,6 +141,104 @@ func (h *TransactionHandler) getSharedTransactionsByDateRange(w http.ResponseWri
 
 	response := models.TransactionResponse{
 		Transactions: transactions,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.logger.Error("Failed to encode response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+func (h *TransactionHandler) getTransactionSummaryByMonth(w http.ResponseWriter, r *http.Request) {
+	tokenValue := r.Context().Value(localauth.UserContextKey)
+	if tokenValue == nil {
+		h.logger.Error("No auth token found in request context")
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	token, ok := tokenValue.(*firebaseauth.Token)
+	if !ok {
+		h.logger.Error("Invalid token type in context")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	userID := token.UID
+
+	startDate := r.URL.Query().Get("startDate")
+	endDate := r.URL.Query().Get("endDate")
+
+	var summaries []models.MonthlySummary
+	var err error
+
+	isAdmin := false
+	claims := token.Claims
+	if role, ok := claims["role"]; ok {
+		isAdmin = role == "admin"
+	}
+
+	if isAdmin {
+		summaries, err = h.transactionRepository.GetAllTransactionSummaryByMonth(r.Context(), startDate, endDate)
+	} else {
+		summaries, err = h.transactionRepository.GetTransactionSummaryByMonth(r.Context(), userID, startDate, endDate)
+	}
+
+	if err != nil {
+		h.logger.Error("Failed to get transaction summary: %v", err)
+		http.Error(w, "Failed to get transaction summary", http.StatusInternalServerError)
+		return
+	}
+
+	if summaries == nil {
+		summaries = []models.MonthlySummary{}
+	}
+
+	response := models.TransactionSummaryResponse{
+		Summaries: summaries,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.logger.Error("Failed to encode response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+func (h *TransactionHandler) getSharedTransactionSummaryByMonth(w http.ResponseWriter, r *http.Request) {
+	tokenValue := r.Context().Value(localauth.UserContextKey)
+	if tokenValue == nil {
+		h.logger.Error("No auth token found in request context")
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	token, ok := tokenValue.(*firebaseauth.Token)
+	if !ok {
+		h.logger.Error("Invalid token type in context")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	userID := token.UID
+
+	startDate := r.URL.Query().Get("startDate")
+	endDate := r.URL.Query().Get("endDate")
+
+	summaries, err := h.transactionRepository.GetSharedTransactionSummaryByMonth(r.Context(), userID, startDate, endDate)
+	if err != nil {
+		h.logger.Error("Failed to get shared transaction summary: %v", err)
+		http.Error(w, "Failed to get shared transaction summary", http.StatusInternalServerError)
+		return
+	}
+
+	if summaries == nil {
+		summaries = []models.MonthlySummary{}
+	}
+
+	response := models.TransactionSummaryResponse{
+		Summaries: summaries,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

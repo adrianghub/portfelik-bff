@@ -16,3 +16,21 @@ type Transaction struct {
 type TransactionResponse struct {
 	Transactions []Transaction `json:"transactions"`
 }
+
+type CategorySummary struct {
+	CategoryID string  `json:"categoryId"`
+	Amount     float64 `json:"amount"`
+	Percentage float64 `json:"percentage"`
+}
+
+type MonthlySummary struct {
+	Month             string            `json:"month"`
+	TotalExpenses     float64           `json:"totalExpenses"`
+	TotalIncome       float64           `json:"totalIncome"`
+	Delta             float64           `json:"delta"`
+	CategorySummaries []CategorySummary `json:"categorySummaries"`
+}
+
+type TransactionSummaryResponse struct {
+	Summaries []MonthlySummary `json:"summaries"`
+}
