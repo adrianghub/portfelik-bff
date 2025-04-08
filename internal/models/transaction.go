@@ -33,5 +33,5 @@ type MonthlySummary struct {
 }
 
 type TransactionSummaryResponse struct {
-	Summaries []MonthlySummary `json:"summaries"`
+	Summary *MonthlySummary `json:"summary"`
 }

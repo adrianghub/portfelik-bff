@@ -170,7 +170,7 @@ func (h *TransactionHandler) getTransactionSummaryByMonth(w http.ResponseWriter,
 	startDate := r.URL.Query().Get("startDate")
 	endDate := r.URL.Query().Get("endDate")
 
-	var summaries []models.MonthlySummary
+	var summary *models.MonthlySummary
 	var err error
 
 	isAdmin := false
@@ -180,23 +180,26 @@ func (h *TransactionHandler) getTransactionSummaryByMonth(w http.ResponseWriter,
 	}
 
 	if isAdmin {
-		summaries, err = h.transactionRepository.GetAllTransactionSummaryByMonth(r.Context(), startDate, endDate)
+		summaries, err := h.transactionRepository.GetAllTransactionSummaryByMonth(r.Context(), startDate, endDate)
+		if err != nil {
+			h.logger.Error("Failed to get transaction summary: %v", err)
+			http.Error(w, "Failed to get transaction summary", http.StatusInternalServerError)
+			return
+		}
+		if len(summaries) > 0 {
+			summary = &summaries[0]
+		}
 	} else {
-		summaries, err = h.transactionRepository.GetTransactionSummaryByMonth(r.Context(), userID, startDate, endDate)
-	}
-
-	if err != nil {
-		h.logger.Error("Failed to get transaction summary: %v", err)
-		http.Error(w, "Failed to get transaction summary", http.StatusInternalServerError)
-		return
-	}
-
-	if summaries == nil {
-		summaries = []models.MonthlySummary{}
+		summary, err = h.transactionRepository.GetTransactionSummaryByMonth(r.Context(), userID, startDate, endDate)
+		if err != nil {
+			h.logger.Error("Failed to get transaction summary: %v", err)
+			http.Error(w, "Failed to get transaction summary", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	response := models.TransactionSummaryResponse{
-		Summaries: summaries,
+		Summary: summary,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -226,19 +229,15 @@ func (h *TransactionHandler) getSharedTransactionSummaryByMonth(w http.ResponseW
 	startDate := r.URL.Query().Get("startDate")
 	endDate := r.URL.Query().Get("endDate")
 
-	summaries, err := h.transactionRepository.GetSharedTransactionSummaryByMonth(r.Context(), userID, startDate, endDate)
+	summary, err := h.transactionRepository.GetSharedTransactionSummaryByMonth(r.Context(), userID, startDate, endDate)
 	if err != nil {
 		h.logger.Error("Failed to get shared transaction summary: %v", err)
 		http.Error(w, "Failed to get shared transaction summary", http.StatusInternalServerError)
 		return
 	}
 
-	if summaries == nil {
-		summaries = []models.MonthlySummary{}
-	}
-
 	response := models.TransactionSummaryResponse{
-		Summaries: summaries,
+		Summary: summary,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
