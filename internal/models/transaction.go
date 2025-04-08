@@ -18,9 +18,10 @@ type TransactionResponse struct {
 }
 
 type CategorySummary struct {
-	CategoryID string  `json:"categoryId"`
-	Amount     float64 `json:"amount"`
-	Percentage float64 `json:"percentage"`
+	CategoryID       string  `json:"categoryId"`
+	Amount           float64 `json:"amount"`
+	Percentage       float64 `json:"percentage"`
+	TransactionCount int     `json:"transactionCount"`
 }
 
 type MonthlySummary struct {
