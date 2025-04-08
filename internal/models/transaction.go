@@ -8,6 +8,9 @@ type Transaction struct {
 	CategoryID     string  `json:"categoryId" firestore:"categoryId"`
 	Type           string  `json:"type" firestore:"type"`
 	Date           string  `json:"date" firestore:"date"`
+	Status         string  `json:"status" firestore:"status"`
+	IsRecurring    bool    `json:"isRecurring" firestore:"isRecurring"`
+	RecurringDate  int     `json:"recurringDate,omitempty" firestore:"recurringDate,omitempty"`
 	CreatedAt      string  `json:"createdAt,omitempty" firestore:"createdAt,omitempty"`
 	UpdatedAt      string  `json:"updatedAt,omitempty" firestore:"updatedAt,omitempty"`
 	ShoppingListID string  `json:"shoppingListId,omitempty" firestore:"shoppingListId,omitempty"`
