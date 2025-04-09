@@ -11,15 +11,15 @@ import (
 
 	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go/v4"
+	"github.com/adrianghub/portfelik-bff/internal/auth"
+	"github.com/adrianghub/portfelik-bff/internal/handlers"
+	"github.com/adrianghub/portfelik-bff/internal/logger"
+	"github.com/adrianghub/portfelik-bff/internal/middlewares"
+	"github.com/adrianghub/portfelik-bff/internal/repositories"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
-	"github.com/panizinko/portfelik-bff/internal/auth"
-	"github.com/panizinko/portfelik-bff/internal/handlers"
-	"github.com/panizinko/portfelik-bff/internal/logger"
-	"github.com/panizinko/portfelik-bff/internal/middlewares"
-	"github.com/panizinko/portfelik-bff/internal/repositories"
 	"google.golang.org/api/option"
 )
 

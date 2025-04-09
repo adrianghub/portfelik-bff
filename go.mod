@@ -1,4 +1,4 @@
-module github.com/panizinko/portfelik-bff
+module github.com/adrianghub/portfelik-bff
 
 go 1.24.1
 

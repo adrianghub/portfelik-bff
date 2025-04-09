@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/panizinko/portfelik-bff/internal/logger"
+	"github.com/adrianghub/portfelik-bff/internal/logger"
 )
 
 func RequestLogger(logger *logger.Logger) func(http.Handler) http.Handler {

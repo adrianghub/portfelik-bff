@@ -22,7 +22,7 @@ A Go backend service that connects to Firebase Admin SDK to provide API endpoint
 1. Clone the repository:
 
 ```sh
-git clone https://github.com/panizinko/portfelik-bff.git
+git clone https://github.com/adrianghub/portfelik-bff.git
 cd portfelik-bff
 ```
 

@@ -5,11 +5,11 @@ import (
 	"net/http"
 
 	firebaseauth "firebase.google.com/go/v4/auth"
+	localauth "github.com/adrianghub/portfelik-bff/internal/auth"
+	"github.com/adrianghub/portfelik-bff/internal/logger"
+	"github.com/adrianghub/portfelik-bff/internal/models"
+	"github.com/adrianghub/portfelik-bff/internal/repositories"
 	"github.com/go-chi/chi/v5"
-	localauth "github.com/panizinko/portfelik-bff/internal/auth"
-	"github.com/panizinko/portfelik-bff/internal/logger"
-	"github.com/panizinko/portfelik-bff/internal/models"
-	"github.com/panizinko/portfelik-bff/internal/repositories"
 )
 
 type TransactionHandler struct {
@@ -72,11 +72,7 @@ func (h *TransactionHandler) getTransactionsByDateRange(w http.ResponseWriter, r
 
 	h.logger.Info("Is admin: %v", isAdmin)
 
-	if isAdmin {
-		transactions, err = h.transactionRepository.GetAllTransactionsByDateRange(r.Context(), startDate, endDate)
-	} else {
-		transactions, err = h.transactionRepository.GetTransactionsByDateRange(r.Context(), userID, startDate, endDate)
-	}
+	transactions, err = h.transactionRepository.GetTransactionsByDateRange(r.Context(), userID, startDate, endDate)
 
 	if err != nil {
 		h.logger.Error("Failed to get transactions: %v", err)
@@ -173,29 +169,11 @@ func (h *TransactionHandler) getTransactionSummaryByMonth(w http.ResponseWriter,
 	var summary *models.MonthlySummary
 	var err error
 
-	isAdmin := false
-	claims := token.Claims
-	if role, ok := claims["role"]; ok {
-		isAdmin = role == "admin"
-	}
-
-	if isAdmin {
-		summaries, err := h.transactionRepository.GetAllTransactionSummaryByMonth(r.Context(), startDate, endDate)
-		if err != nil {
-			h.logger.Error("Failed to get transaction summary: %v", err)
-			http.Error(w, "Failed to get transaction summary", http.StatusInternalServerError)
-			return
-		}
-		if len(summaries) > 0 {
-			summary = &summaries[0]
-		}
-	} else {
-		summary, err = h.transactionRepository.GetTransactionSummaryByMonth(r.Context(), userID, startDate, endDate)
-		if err != nil {
-			h.logger.Error("Failed to get transaction summary: %v", err)
-			http.Error(w, "Failed to get transaction summary", http.StatusInternalServerError)
-			return
-		}
+	summary, err = h.transactionRepository.GetTransactionSummaryByMonth(r.Context(), userID, startDate, endDate)
+	if err != nil {
+		h.logger.Error("Failed to get transaction summary: %v", err)
+		http.Error(w, "Failed to get transaction summary", http.StatusInternalServerError)
+		return
 	}
 
 	response := models.TransactionSummaryResponse{
