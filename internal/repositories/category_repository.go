@@ -2,6 +2,8 @@ package repositories
 
 import (
 	"context"
+	"sort"
+	"strings"
 
 	"cloud.google.com/go/firestore"
 	"github.com/adrianghub/portfelik-bff/internal/logger"
@@ -168,6 +170,10 @@ func (r *CategoryRepository) GetAllUserCategories(ctx context.Context, userID st
 	for _, cat := range uniqueCategories {
 		result = append(result, cat)
 	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return strings.ToLower(result[i].Name) < strings.ToLower(result[j].Name)
+	})
 
 	return result, nil
 }
