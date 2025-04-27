@@ -22,6 +22,7 @@ type TransactionResponse struct {
 
 type CategorySummary struct {
 	CategoryID       string  `json:"categoryId"`
+	CategoryName     string  `json:"categoryName,omitempty"`
 	Amount           float64 `json:"amount"`
 	Percentage       float64 `json:"percentage"`
 	TransactionCount int     `json:"transactionCount"`

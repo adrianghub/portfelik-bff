@@ -95,6 +95,7 @@ func main() {
 	defer firestoreClient.Close()
 
 	transactionRepository := repositories.NewTransactionRepository(firestoreClient, logger)
+	categoryRepository := repositories.NewCategoryRepository(firestoreClient, logger)
 
 	authService, err := auth.NewFirebaseAuth(credentialsJson)
 	if err != nil {
@@ -127,8 +128,11 @@ func main() {
 		r.Group(func(r chi.Router) {
 			r.Use(authService.Middleware())
 
-			transactionHandler := handlers.NewTransactionHandler(transactionRepository, logger)
+			transactionHandler := handlers.NewTransactionHandler(transactionRepository, categoryRepository, logger)
+			categoryHandler := handlers.NewCategoryHandler(categoryRepository, logger)
+
 			r.Mount("/transactions", transactionHandler.Routes())
+			r.Mount("/categories", categoryHandler.Routes())
 		})
 	})
 

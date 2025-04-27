@@ -3,11 +3,11 @@ package repositories
 import (
 	"context"
 	"math"
-	"time"
 
 	"cloud.google.com/go/firestore"
 	"github.com/adrianghub/portfelik-bff/internal/logger"
 	"github.com/adrianghub/portfelik-bff/internal/models"
+	"github.com/adrianghub/portfelik-bff/internal/utils"
 	"google.golang.org/api/iterator"
 )
 
@@ -164,14 +164,29 @@ func (r *TransactionRepository) GetTransactionSummaryByMonth(
 	ctx context.Context,
 	userID string,
 	startDate, endDate string,
+	categoryRepository *CategoryRepository,
 ) (*models.MonthlySummary, error) {
 	transactions, err := r.GetTransactionsByDateRange(ctx, userID, startDate, endDate)
 	if err != nil {
 		return nil, err
 	}
 
-	// Extract the month from the start date since we know it's always from the beginning of the month
-	month, err := extractMonthKey(startDate)
+	// Get all categories for this user (including shared ones)
+	categories, err := categoryRepository.GetAllUserCategories(ctx, userID)
+	if err != nil {
+		r.logger.Error("Error fetching categories: %v", err)
+		// Continue with empty categories - we'll use category IDs as names
+		categories = []models.Category{}
+	}
+
+	// Create a map for quick category lookup
+	categoryMap := make(map[string]models.Category)
+	for _, cat := range categories {
+		categoryMap[cat.ID] = cat
+	}
+
+	// Extract the month from the start date
+	month, err := utils.ExtractMonthKey(startDate)
 	if err != nil {
 		return nil, err
 	}
@@ -205,8 +220,15 @@ func (r *TransactionRepository) GetTransactionSummaryByMonth(
 			percentage = (amount / monthlySummary.TotalExpenses) * 100
 		}
 
+		// Get category name or use ID if not found
+		categoryName := categoryID
+		if cat, found := categoryMap[categoryID]; found {
+			categoryName = cat.Name
+		}
+
 		monthlySummary.CategorySummaries = append(monthlySummary.CategorySummaries, models.CategorySummary{
 			CategoryID:       categoryID,
+			CategoryName:     categoryName,
 			Amount:           amount,
 			Percentage:       percentage,
 			TransactionCount: categoryTransactionCounts[categoryID],
@@ -216,18 +238,30 @@ func (r *TransactionRepository) GetTransactionSummaryByMonth(
 	return monthlySummary, nil
 }
 
+// GetSharedTransactionSummaryWithCategoryNames returns shared transaction summary with category names
 func (r *TransactionRepository) GetSharedTransactionSummaryByMonth(
 	ctx context.Context,
 	userID string,
 	startDate, endDate string,
+	categoryRepository *CategoryRepository,
 ) (*models.MonthlySummary, error) {
 	transactions, err := r.GetSharedTransactionsByDateRange(ctx, userID, startDate, endDate)
 	if err != nil {
 		return nil, err
 	}
 
-	// Extract the month from the start date since we know it's always from the beginning of the month
-	month, err := extractMonthKey(startDate)
+	categories, err := categoryRepository.GetAllUserCategories(ctx, userID)
+	if err != nil {
+		r.logger.Error("Error fetching categories: %v", err)
+		categories = []models.Category{}
+	}
+
+	categoryMap := make(map[string]models.Category)
+	for _, cat := range categories {
+		categoryMap[cat.ID] = cat
+	}
+
+	month, err := utils.ExtractMonthKey(startDate)
 	if err != nil {
 		return nil, err
 	}
@@ -261,8 +295,15 @@ func (r *TransactionRepository) GetSharedTransactionSummaryByMonth(
 			percentage = (amount / monthlySummary.TotalExpenses) * 100
 		}
 
+		// Get category name or use ID if not found
+		categoryName := categoryID
+		if cat, found := categoryMap[categoryID]; found {
+			categoryName = cat.Name
+		}
+
 		monthlySummary.CategorySummaries = append(monthlySummary.CategorySummaries, models.CategorySummary{
 			CategoryID:       categoryID,
+			CategoryName:     categoryName,
 			Amount:           amount,
 			Percentage:       percentage,
 			TransactionCount: categoryTransactionCounts[categoryID],
@@ -270,19 +311,4 @@ func (r *TransactionRepository) GetSharedTransactionSummaryByMonth(
 	}
 
 	return monthlySummary, nil
-}
-
-func extractMonthKey(dateStr string) (string, error) {
-	var t time.Time
-	var err error
-
-	t, err = time.Parse(time.RFC3339, dateStr)
-	if err != nil {
-		t, err = time.Parse("2006-01-02", dateStr)
-		if err != nil {
-			return "", err
-		}
-	}
-
-	return t.Format("2006-01"), nil
 }
