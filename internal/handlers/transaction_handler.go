@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"sort"
 
@@ -58,8 +59,10 @@ func (h *TransactionHandler) getAllTransactions(w http.ResponseWriter, r *http.R
 	userID := token.UID
 	h.logger.Info("Fetching all transactions for user: %s", userID)
 
-	startDate := r.URL.Query().Get("startDate")
-	endDate := r.URL.Query().Get("endDate")
+	queryParams := r.URL.Query()
+	startDate := queryParams.Get("startDate")
+	endDate := queryParams.Get("endDate")
+	categoryId := queryParams.Get("category")
 
 	// Fetch both user and shared transactions concurrently
 	userTransactionsChan := make(chan []models.Transaction)
@@ -68,13 +71,13 @@ func (h *TransactionHandler) getAllTransactions(w http.ResponseWriter, r *http.R
 	sharedErrChan := make(chan error)
 
 	go func() {
-		transactions, err := h.transactionRepository.GetTransactionsByDateRange(r.Context(), userID, startDate, endDate)
+		transactions, err := h.transactionRepository.GetTransactionsByDateRange(r.Context(), userID, startDate, endDate, categoryId)
 		userTransactionsChan <- transactions
 		userErrChan <- err
 	}()
 
 	go func() {
-		transactions, err := h.transactionRepository.GetSharedTransactionsByDateRange(r.Context(), userID, startDate, endDate)
+		transactions, err := h.transactionRepository.GetSharedTransactionsByDateRange(r.Context(), userID, startDate, endDate, categoryId)
 		sharedTransactionsChan <- transactions
 		sharedErrChan <- err
 	}()
@@ -131,8 +134,11 @@ func (h *TransactionHandler) getAllTransactionSummary(w http.ResponseWriter, r *
 	userID := token.UID
 	h.logger.Info("Fetching all transaction summaries for user: %s", userID)
 
-	startDate := r.URL.Query().Get("startDate")
-	endDate := r.URL.Query().Get("endDate")
+	// Get query parameters
+	queryParams := r.URL.Query()
+	startDate := queryParams.Get("startDate")
+	endDate := queryParams.Get("endDate")
+	categoryId := queryParams.Get("category")
 
 	// Fetch both user and shared transaction summaries concurrently
 	userSummaryChan := make(chan *models.MonthlySummary)
@@ -146,6 +152,7 @@ func (h *TransactionHandler) getAllTransactionSummary(w http.ResponseWriter, r *
 			userID,
 			startDate,
 			endDate,
+			categoryId,
 			h.categoryRepository,
 		)
 		userSummaryChan <- summary
@@ -158,6 +165,7 @@ func (h *TransactionHandler) getAllTransactionSummary(w http.ResponseWriter, r *
 			userID,
 			startDate,
 			endDate,
+			categoryId,
 			h.categoryRepository,
 		)
 		sharedSummaryChan <- summary
@@ -198,69 +206,66 @@ func (h *TransactionHandler) getAllTransactionSummary(w http.ResponseWriter, r *
 // combineSummaries combines user and shared transaction summaries
 func (h *TransactionHandler) combineSummaries(userSummary, sharedSummary *models.MonthlySummary) *models.MonthlySummary {
 	if userSummary == nil && sharedSummary == nil {
-		return nil
+		return nil // Or return an empty summary object
 	}
-
-	var combinedSummary *models.MonthlySummary
 	if userSummary == nil {
-		combinedSummary = sharedSummary
-		return combinedSummary
+		return sharedSummary
 	}
-
 	if sharedSummary == nil {
-		combinedSummary = userSummary
-		return combinedSummary
+		return userSummary
 	}
 
-	// Create a new combined summary
-	combinedSummary = &models.MonthlySummary{
+	combined := &models.MonthlySummary{
 		Month:         userSummary.Month,
 		TotalExpenses: userSummary.TotalExpenses + sharedSummary.TotalExpenses,
 		TotalIncome:   userSummary.TotalIncome + sharedSummary.TotalIncome,
-		Delta:         userSummary.Delta + sharedSummary.Delta,
+		Delta:         (userSummary.TotalIncome + sharedSummary.TotalIncome) - (userSummary.TotalExpenses + sharedSummary.TotalExpenses),
 	}
 
 	// Combine category summaries
 	categoryMap := make(map[string]models.CategorySummary)
 
-	// Process user summary categories
-	for _, category := range userSummary.CategorySummaries {
-		categoryMap[category.CategoryID] = category
+	// Add user categories
+	for _, cat := range userSummary.CategorySummaries {
+		categoryMap[cat.CategoryID] = cat
 	}
 
-	// Process shared summary categories and combine with user categories
-	for _, category := range sharedSummary.CategorySummaries {
-		if existing, ok := categoryMap[category.CategoryID]; ok {
-			// Category exists in both summaries, combine them
-			combinedAmount := existing.Amount + category.Amount
-			combinedTransactionCount := existing.TransactionCount + category.TransactionCount
-
-			existing.Amount = combinedAmount
-			existing.TransactionCount = combinedTransactionCount
-			if combinedSummary.TotalExpenses > 0 {
-				existing.Percentage = (combinedAmount / combinedSummary.TotalExpenses) * 100
-			}
-			categoryMap[category.CategoryID] = existing
+	// Add or merge shared categories
+	for _, sharedCat := range sharedSummary.CategorySummaries {
+		if existingCat, ok := categoryMap[sharedCat.CategoryID]; ok {
+			// Category exists, merge amounts and counts
+			existingCat.Amount += sharedCat.Amount
+			existingCat.TransactionCount += sharedCat.TransactionCount
+			categoryMap[sharedCat.CategoryID] = existingCat
 		} else {
-			// Category only exists in shared summary
-			newCategory := category
-			if combinedSummary.TotalExpenses > 0 {
-				newCategory.Percentage = (newCategory.Amount / combinedSummary.TotalExpenses) * 100
-			}
-			categoryMap[category.CategoryID] = newCategory
+			// New category, add it
+			categoryMap[sharedCat.CategoryID] = sharedCat
 		}
 	}
 
-	// Convert map to slice
-	combinedSummary.CategorySummaries = make([]models.CategorySummary, 0, len(categoryMap))
-	for _, category := range categoryMap {
-		combinedSummary.CategorySummaries = append(combinedSummary.CategorySummaries, category)
+	// Recalculate percentages based on combined totals
+	combinedTotalCategorizedAmount := 0.0
+	for _, cat := range categoryMap {
+		combinedTotalCategorizedAmount += math.Abs(cat.Amount)
 	}
 
-	// Sort by amount (descending)
-	sort.Slice(combinedSummary.CategorySummaries, func(i, j int) bool {
-		return combinedSummary.CategorySummaries[i].Amount > combinedSummary.CategorySummaries[j].Amount
+	combinedCategories := make([]models.CategorySummary, 0, len(categoryMap))
+	for _, cat := range categoryMap {
+		if combinedTotalCategorizedAmount != 0 {
+			cat.Percentage = (math.Abs(cat.Amount) / combinedTotalCategorizedAmount) * 100
+		} else {
+			cat.Percentage = 0
+		}
+		combinedCategories = append(combinedCategories, cat)
+	}
+
+	// Sort combined categories (e.g., by amount or name)
+	sort.Slice(combinedCategories, func(i, j int) bool {
+		// Example: Sort by absolute amount descending
+		return math.Abs(combinedCategories[i].Amount) > math.Abs(combinedCategories[j].Amount)
 	})
 
-	return combinedSummary
+	combined.CategorySummaries = combinedCategories
+
+	return combined
 }

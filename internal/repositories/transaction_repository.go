@@ -31,20 +31,25 @@ func (r *TransactionRepository) GetTransactionsByDateRange(
 	ctx context.Context,
 	userID string,
 	startDate, endDate string,
+	categoryId string,
 ) ([]models.Transaction, error) {
 	var transactions []models.Transaction
 
 	query := r.client.Collection(transactionsCollection).
-		Where("userId", "==", userID).
-		OrderBy("date", firestore.Desc)
+		Where("userId", "==", userID)
 
-	if startDate != "" && endDate != "" {
-		query = r.client.Collection(transactionsCollection).
-			Where("userId", "==", userID).
-			Where("date", ">=", startDate).
-			Where("date", "<=", endDate).
-			OrderBy("date", firestore.Desc)
+	if startDate != "" {
+		query = query.Where("date", ">=", startDate)
 	}
+	if endDate != "" {
+		query = query.Where("date", "<=", endDate)
+	}
+
+	if categoryId != "" {
+		query = query.Where("categoryId", "==", categoryId)
+	}
+
+	query = query.OrderBy("date", firestore.Desc)
 
 	iter := query.Documents(ctx)
 	defer iter.Stop()
@@ -74,6 +79,7 @@ func (r *TransactionRepository) GetSharedTransactionsByDateRange(
 	ctx context.Context,
 	userID string,
 	startDate, endDate string,
+	categoryId string,
 ) ([]models.Transaction, error) {
 	userDoc, err := r.client.Collection("users").Doc(userID).Get(ctx)
 	if err != nil {
@@ -124,16 +130,20 @@ func (r *TransactionRepository) GetSharedTransactionsByDateRange(
 	}
 
 	query := r.client.Collection(transactionsCollection).
-		Where("userId", "in", memberIDsArray).
-		OrderBy("date", firestore.Desc)
+		Where("userId", "in", memberIDsArray)
 
-	if startDate != "" && endDate != "" {
-		query = r.client.Collection(transactionsCollection).
-			Where("userId", "in", memberIDsArray).
-			Where("date", ">=", startDate).
-			Where("date", "<=", endDate).
-			OrderBy("date", firestore.Desc)
+	if startDate != "" {
+		query = query.Where("date", ">=", startDate)
 	}
+	if endDate != "" {
+		query = query.Where("date", "<=", endDate)
+	}
+
+	if categoryId != "" {
+		query = query.Where("categoryId", "==", categoryId)
+	}
+
+	query = query.OrderBy("date", firestore.Desc)
 
 	iter := query.Documents(ctx)
 	defer iter.Stop()
@@ -164,9 +174,10 @@ func (r *TransactionRepository) GetTransactionSummaryByMonth(
 	ctx context.Context,
 	userID string,
 	startDate, endDate string,
+	categoryId string,
 	categoryRepository *CategoryRepository,
 ) (*models.MonthlySummary, error) {
-	transactions, err := r.GetTransactionsByDateRange(ctx, userID, startDate, endDate)
+	transactions, err := r.GetTransactionsByDateRange(ctx, userID, startDate, endDate, categoryId)
 	if err != nil {
 		return nil, err
 	}
@@ -243,9 +254,10 @@ func (r *TransactionRepository) GetSharedTransactionSummaryByMonth(
 	ctx context.Context,
 	userID string,
 	startDate, endDate string,
+	categoryId string,
 	categoryRepository *CategoryRepository,
 ) (*models.MonthlySummary, error) {
-	transactions, err := r.GetSharedTransactionsByDateRange(ctx, userID, startDate, endDate)
+	transactions, err := r.GetSharedTransactionsByDateRange(ctx, userID, startDate, endDate, categoryId)
 	if err != nil {
 		return nil, err
 	}
